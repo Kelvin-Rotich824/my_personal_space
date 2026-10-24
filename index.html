@@ -705,12 +705,16 @@
     // --- FIREBASE BACKEND ---
     // Paste your Firebase web-app config here (Project settings > Your apps).
     // These values are safe to be public; your Firestore security rules protect the data.
-    const FIREBASE_CONFIG = {
-      apiKey: 'REPLACE_WITH_FIREBASE_API_KEY',
-      authDomain: 'REPLACE_WITH_PROJECT_ID.firebaseapp.com',
-      projectId: 'REPLACE_WITH_PROJECT_ID',
-      appId: 'REPLACE_WITH_FIREBASE_APP_ID'
-    };
+    // For Firebase JS SDK v7.20.0 and later, measurementId is optional
+  const firebaseConfig = {
+    apiKey: "AIzaSyB1DiJmzgdap933S5dGCOKsJRMDvDHo7Y4",
+    authDomain: "my-personal-bio-app.firebaseapp.com",
+    projectId: "my-personal-bio-app",
+    storageBucket: "my-personal-bio-app.firebasestorage.app",
+    messagingSenderId: "264269069815",
+    appId: "1:264269069815:web:ce63682ab24359168142f2",
+    measurementId: "G-3SDEV308H7"
+  };
     const FIREBASE_VERSION = '10.12.2';
     const FB_CONFIGURED = !Object.values(FIREBASE_CONFIG).some(v => String(v).includes('REPLACE_WITH'));
     let fb = null;
