@@ -641,6 +641,7 @@
       <form onsubmit="verifyAdminLogin(event)" class="space-y-3">
         <input type="email" id="adminEmailInput" required autocomplete="username" placeholder="Email" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white outline-none focus:border-amber-500 text-center">
         <input type="password" id="adminPassInput" required autocomplete="current-password" placeholder="Password" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white outline-none focus:border-amber-500 text-center">
+        <p id="adminLoginError" class="hidden text-xs text-rose-400 leading-relaxed text-left break-words"></p>
         <div class="flex gap-2">
           <button type="button" onclick="closeAdminModal()" class="flex-1 bg-slate-800 text-slate-300 text-xs font-semibold py-2.5 rounded-xl">Cancel</button>
           <button type="submit" class="flex-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs py-2.5 rounded-xl shadow">Sign in</button>
@@ -705,16 +706,12 @@
     // --- FIREBASE BACKEND ---
     // Paste your Firebase web-app config here (Project settings > Your apps).
     // These values are safe to be public; your Firestore security rules protect the data.
-    // For Firebase JS SDK v7.20.0 and later, measurementId is optional
-  const firebaseConfig = {
-    apiKey: "AIzaSyB1DiJmzgdap933S5dGCOKsJRMDvDHo7Y4",
-    authDomain: "my-personal-bio-app.firebaseapp.com",
-    projectId: "my-personal-bio-app",
-    storageBucket: "my-personal-bio-app.firebasestorage.app",
-    messagingSenderId: "264269069815",
-    appId: "1:264269069815:web:ce63682ab24359168142f2",
-    measurementId: "G-3SDEV308H7"
-  };
+    const FIREBASE_CONFIG = {
+      apiKey: 'AIzaSyB1DiJmzgdap933S5dGCOKsJRMDvDHo7Y4',
+      authDomain: 'my-personal-bio-app.firebaseapp.com',
+      projectId: 'my-personal-bio-app',
+      appId: '1:264269069815:web:ce63682ab24359168142f2'
+    };
     const FIREBASE_VERSION = '10.12.2';
     const FB_CONFIGURED = !Object.values(FIREBASE_CONFIG).some(v => String(v).includes('REPLACE_WITH'));
     let fb = null;
@@ -793,10 +790,14 @@
       let deniedShown = false;
       const onDenied = err => {
         console.error('Admin listener error', err);
-        if (err && err.code === 'permission-denied' && !deniedShown) {
+        if (deniedShown) return;
+        if (err && err.code === 'permission-denied') {
           deniedShown = true;
-          alert('This account does not have owner access.');
+          const uid = fb.authInst.currentUser ? fb.authInst.currentUser.uid : 'unknown';
           adminSignOut();
+          showAdminError('Signed in, but Firestore refused access. Make sure your Firestore rules are published and contain this exact User UID: ' + uid);
+        } else {
+          showToast('Dashboard data error: ' + ((err && err.code) || 'unknown'));
         }
       };
       adminUnsubs.push(onSnapshot(query(collection(fb.db, 'messages'), orderBy('createdAt', 'desc'), limit(500)), snap => {
@@ -848,10 +849,17 @@
       }
     }
 
+    function safeRenderCharts() {
+      try {
+        if (typeof Chart === 'undefined') { console.warn('Chart.js did not load; skipping charts.'); return; }
+        renderCharts();
+      } catch (err) { console.error('Charts failed', err); }
+    }
+
     function refreshDashboardIfVisible() {
       if (document.getElementById('dashboardView').classList.contains('hidden')) return;
       updateDashboardMetrics();
-      renderCharts();
+      safeRenderCharts();
       renderVisitorLogs(document.getElementById('visitorSearch').value);
       renderMessagesInbox();
     }
@@ -1108,8 +1116,16 @@
         switchView('dashboard');
       } else {
         document.getElementById('adminPassInput').value = '';
+        showAdminError('');
         document.getElementById('adminPasscodeModal').classList.remove('hidden');
       }
+    }
+
+    function showAdminError(msg) {
+      const el = document.getElementById('adminLoginError');
+      el.textContent = msg || '';
+      el.classList.toggle('hidden', !msg);
+      if (msg) document.getElementById('adminPasscodeModal').classList.remove('hidden');
     }
 
     function closeAdminModal() {
@@ -1124,17 +1140,30 @@
       }
       const email = document.getElementById('adminEmailInput').value.trim();
       const pass = document.getElementById('adminPassInput').value;
+      showAdminError('');
       try {
         await fb.auth.signInWithEmailAndPassword(fb.authInst, email, pass);
-        document.getElementById('adminPassInput').value = '';
-        state.isAdminLoggedIn = true;
-        enableOwnerMode();
-        closeAdminModal();
-        switchView('dashboard');
       } catch (err) {
         console.error(err);
-        alert('Sign-in failed. Check your email and password.');
+        const code = (err && err.code) || '';
+        const reasons = {
+          'auth/invalid-credential': 'Wrong email or password.',
+          'auth/wrong-password': 'Wrong email or password.',
+          'auth/user-not-found': 'No account with that email.',
+          'auth/invalid-email': 'That email address is not valid.',
+          'auth/operation-not-allowed': 'Email/Password sign-in is not enabled in Firebase (Authentication > Sign-in method).',
+          'auth/unauthorized-domain': 'This website address is not in Firebase Authorized domains (Authentication > Settings).',
+          'auth/network-request-failed': 'Network problem. Check your connection and try again.',
+          'auth/too-many-requests': 'Too many attempts. Wait a few minutes and try again.'
+        };
+        showAdminError((reasons[code] || 'Sign-in failed.') + (code ? ` (${code})` : ''));
+        return;
       }
+      document.getElementById('adminPassInput').value = '';
+      state.isAdminLoggedIn = true;
+      enableOwnerMode();
+      closeAdminModal();
+      switchView('dashboard');
     }
 
     function updateUnreadBadges() {
@@ -1396,7 +1425,7 @@
         document.getElementById('dashboardView').classList.remove('hidden');
         document.getElementById('navDashboardBtn').className = "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-white bg-slate-800 shadow";
         updateDashboardMetrics();
-        renderCharts();
+        safeRenderCharts();
         renderVisitorLogs();
         renderMessagesInbox();
       } else if (view === 'guide') {
